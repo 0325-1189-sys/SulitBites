@@ -123,6 +123,10 @@ const adminViews = {
     return `<div class="sh"><h2>Products</h2><button class="btn sm" onclick="prodForm()">Add product</button></div><div class="card tw"><table class="tbl"><tr><th></th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th></th></tr>${db.products.map(p => `<tr><td class="em">${p.emoji}</td><td>${esc(p.name)}</td><td>${p.category}</td><td>${peso(p.price)}</td><td>${p.stock}</td><td class="act"><button class="btn alt sm" onclick="prodForm(${p.id})">Edit</button> <button class="btn alt sm" onclick="delProd(${p.id})">Delete</button></td></tr>`).join("")}</table></div>`;
   },
   orders() { return "<h2>Orders</h2><br>" + ordersTable(db.orders, true); },
+  customers() {
+    const l = db.users.filter(u => !u.isStaff);
+    return `<h2>Customers</h2><p class="mut">${l.length} registered ${l.length === 1 ? "account" : "accounts"} saved in this browser.</p><br><div class="card tw"><table class="tbl"><tr><th>Name</th><th>Username</th><th>Orders</th><th>Total spent</th></tr>${l.map(u => { const o = db.orders.filter(x => x.username === u.username && x.status !== "Cancelled"); return `<tr><td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${o.length}</td><td>${peso(o.reduce((s, x) => s + x.total, 0))}</td></tr>`; }).join("")}</table></div>`;
+  },
   payments() {
     return `<h2>Payment records</h2><div class="sh mt"><input class="in sm" id="ps" aria-label="Search" placeholder="Search order or customer" oninput="drawPay()"><select class="in sm" id="pf" aria-label="Method" onchange="drawPay()"><option>All</option><option>Cash</option><option>GCash</option><option>Card</option></select></div><div class="card tw" id="pt"></div>`;
   }

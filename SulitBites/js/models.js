@@ -19,7 +19,7 @@ class User {
 }
 class Admin extends User {
   get role() { return "Admin"; } get isStaff() { return true; } get canManageProducts() { return true; }
-  get adminTabs() { return ["dashboard", "products", "orders", "payments"]; }
+  get adminTabs() { return ["dashboard", "products", "orders", "customers", "payments"]; }
 }
 class Cashier extends User {
   get role() { return "Cashier"; } get isStaff() { return true; }
