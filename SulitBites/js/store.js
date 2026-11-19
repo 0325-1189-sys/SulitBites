@@ -1,7 +1,7 @@
 "use strict";
 const SEED_USERS = [
-  { role: "Admin", username: "admin", password: "admin123", name: "Store Admin" },
-  { role: "Cashier", username: "cashier", password: "cashier123", name: "Main Cashier" },
+  { role: "Admin", username: "admin", password: "admin123", name: "Nicole Admin" },
+  { role: "Cashier", username: "cashier", password: "cashier123", name: "Maria Cashier" },
   { role: "Customer", username: "juan", password: "juan123", name: "Juan Dela Cruz" }
 ];
 const SEED_PRODUCTS = [
@@ -23,6 +23,8 @@ class Store {
   #mem = {};
   constructor() {
     this.users = (this.#r("users") || SEED_USERS).map(User.create);
+    // keep staff display names in sync with SEED_USERS, even for data saved earlier in this browser
+    SEED_USERS.filter(s => s.role !== "Customer").forEach(s => { const u = this.users.find(x => x.username === s.username); if (u) u.name = s.name; });
     this.products = (this.#r("products") || SEED_PRODUCTS).map(FoodProduct.create);
     this.orders = (this.#r("orders") || []).map(d => new Order(d));
     this.cart = this.#r("cart") || [];
