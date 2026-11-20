@@ -87,6 +87,9 @@ class OrderItem {
 }
 class Order {
   static STATUSES = ["Pending", "Preparing", "Ready", "Completed", "Cancelled"];
-  constructor(d) { Object.assign(this, { status: "Pending", date: new Date().toISOString() }, d); }
-  get total() { return this.lines.reduce((s, l) => s + l.subtotal, 0); }
+  constructor(d) { Object.assign(this, { status: "Pending", date: new Date().toISOString(), cashier: "", type: "Online order" }, d); }
+  get billed() { return this.lines.reduce((s, l) => s + l.subtotal, 0); }                                   // amount before any cancellation
+  get gross() { return this.lines.reduce((s, l) => s + (l.price ?? l.subtotal / l.qty) * l.qty, 0); }        // price x qty, no discount
+  get discount() { return this.gross - this.billed; }
+  get total() { return this.status === "Cancelled" ? 0 : this.billed; }                                      // cancelled orders count as 0
 }

@@ -7,6 +7,7 @@ const badge = s => `<span class="bd ${s}">${s}</span>`;
 const db = new Store();
 let user = db.sessionUser(), authTab = "login";
 const mf = { cat: "All", q: "" };
+const STORE = { name: "Sulit Bites", branch: "Main Branch", address: "Laguna State Polytechnic University, Laguna" };   // edit for the receipt header
 
 function toast(m, err) { const t = $("#toast"); t.textContent = m; t.className = "show" + (err ? " err" : ""); clearTimeout(toast.t); toast.t = setTimeout(() => t.className = "", 2800); }
 function modal(h) { $("#modal").innerHTML = `<div class="box">${h}</div>`; $("#modal").classList.remove("hidden"); }
@@ -64,7 +65,7 @@ function cart() {
   const raw = items.reduce((s, i) => s + i.product.price * i.qty, 0), total = items.reduce((s, i) => s + i.subtotal, 0);
   return `<section class="wrap sec"><h2>Your cart</h2><div class="split"><div class="card">${items.map(i => `<div class="line"><span class="em">${i.product.emoji}</span><div class="li"><b>${esc(i.product.name)}</b><small>${peso(i.product.price)} each</small></div><div class="qty"><button aria-label="Less" onclick="chg(${i.product.id},-1)">−</button><span>${i.qty}</span><button aria-label="More" onclick="chg(${i.product.id},1)">+</button></div><b class="lt">${peso(i.subtotal)}</b><button class="x" aria-label="Remove" onclick="rm(${i.product.id})">✕</button></div>`).join("")}</div>
   <aside class="card sum"><h3>Order summary</h3><div class="r"><span>Subtotal</span><span>${peso(raw)}</span></div><div class="r g"><span>Bulk discount</span><span>−${peso(raw - total)}</span></div><div class="r t"><span>Total</span><span>${peso(total)}</span></div>
-  <label for="pm">Payment method</label><select id="pm" class="in" onchange="pdHint()"><option>Cash</option><option>GCash</option><option>Card</option></select><input id="pd" class="in" placeholder="Cash amount, e.g. 500"><button class="btn lg full" onclick="checkout()">${user ? "Place order" : "Login to checkout"}</button></aside></div></section>`;
+  ${user && user.isStaff ? '<label for="cn">Customer name</label><input id="cn" class="in" placeholder="Walk-in customer">' : ""}<label for="pm">Payment method</label><select id="pm" class="in" onchange="pdHint()"><option>Cash</option><option>GCash</option><option>Card</option></select><input id="pd" class="in" placeholder="Cash amount, e.g. 500"><button class="btn lg full" onclick="checkout()">${user ? "Place order" : "Login to checkout"}</button></aside></div></section>`;
 }
 function pdHint() { $("#pd").placeholder = { Cash: "Cash amount, e.g. 500", GCash: "GCash number, 09XXXXXXXXX", Card: "16-digit card number" }[$("#pm").value]; }
 function checkout() {
@@ -76,17 +77,27 @@ function checkout() {
   const pay = new Pay(total, $("#pd").value);
   try { pay.process(); } catch (e) { return toast(e.message, 1); }
   items.forEach(i => i.product.stock -= i.qty);
-  const o = new Order({ id: db.nextOrderId(), username: user.username, customer: user.name, method: pay.method, change: pay.change,
-    lines: items.map(i => ({ pid: i.product.id, name: i.product.name, emoji: i.product.emoji, qty: i.qty, subtotal: i.subtotal })) });
-  db.orders.unshift(o); db.cart = []; db.save(); location.hash = "#/orders"; route(); receipt(o);
+  const walk = user.isStaff, cn = walk ? ($("#cn").value.trim() || "Walk-in customer") : user.name;
+  const o = new Order({ id: db.nextOrderId(), username: user.username, customer: cn, method: pay.method, change: pay.change,
+    type: walk ? "Walk-in" : "Online order", cashier: walk ? user.name : "",
+    lines: items.map(i => ({ pid: i.product.id, name: i.product.name, emoji: i.product.emoji, qty: i.qty, price: i.product.price, subtotal: i.subtotal })) });
+  db.orders.unshift(o); db.cart = []; db.save(); location.hash = walk ? "#/admin/orders" : "#/orders"; route(); receipt(o);
 }
 function receipt(o) {
-  modal(`<div class="rc"><h2>Receipt</h2><p class="mut">Order #${o.id}<br>${when(o.date)}<br>${esc(o.customer)}</p><div class="tdash"></div>${o.lines.map(l => `<div class="r"><span>${l.emoji} ${esc(l.name)} x${l.qty}</span><span>${peso(l.subtotal)}</span></div>`).join("")}<div class="tdash"></div>
-  <div class="r t"><span>Total</span><span>${peso(o.total)}</span></div><div class="r"><span>Paid with</span><span>${o.method}</span></div>${o.change ? `<div class="r"><span>Change</span><span>${peso(o.change)}</span></div>` : ""}<div class="r"><span>Status</span>${badge(o.status)}</div></div><br><button class="btn full" onclick="closeModal()">Close</button>`);
+  if (user && user.isStaff && !o.cashier) { o.cashier = user.name; db.save(); }   // the staff who issues the receipt is the cashier
+  const x = o.status === "Cancelled", site = location.host || STORE.name + " website";
+  const row = (l, v, c = "") => `<div class="r ${c}"><span>${l}</span><span>${v}</span></div>`;
+  modal(`<div class="rc"><div class="rh"><div class="rlogo">🍔</div><h2>${STORE.name}</h2><p>${STORE.branch}<br>${STORE.address}<br>${site}</p></div><div class="tdash"></div>
+  ${x ? '<div class="stamp">CANCELLED</div>' : ""}${row("Receipt no.", "#" + o.id)}${row("Date and time", when(o.date))}${row("Cashier", esc(o.cashier || "Not yet assigned"))}${row("Customer", esc(o.customer))}${row("Order type", o.type)}<div class="tdash"></div>
+  ${o.lines.map(l => row(l.qty + " x " + esc(l.name), peso(l.subtotal))).join("")}<div class="tdash"></div>
+  ${row("Subtotal", peso(o.gross))}${o.discount > 0.005 ? row("Bulk discount", "-" + peso(o.discount)) : ""}${x ? row("Order cancelled", "-" + peso(o.billed)) : ""}${row("Total", peso(o.total), "t")}
+  ${x ? row("Payment", "None, no charge") : row("Paid with", o.method) + (o.method === "Cash" ? row("Cash received", peso(o.billed + o.change)) + row("Change", peso(o.change)) : "")}${row("Status", badge(o.status))}
+  <div class="tdash"></div><p class="thx">Thank you for ordering!<br>${STORE.name}<br>${site}</p></div>
+  <div class="two2 noprint"><button class="btn alt" onclick="closeModal()">Close</button><button class="btn" onclick="window.print()">Print receipt</button></div>`);
 }
 function orders() {
   const l = db.orders.filter(o => o.username === user.username);
-  return `<section class="wrap sec"><h2>My orders</h2>${l.length ? l.map(o => `<div class="card oc"><div><b>Order #${o.id}</b><small>${when(o.date)}</small></div><div>${o.lines.map(x => `${x.emoji} ${esc(x.name)} x${x.qty}`).join(", ")}</div><div class="or"><b>${peso(o.total)}</b>${badge(o.status)}<button class="btn alt sm" onclick="receipt(db.orders.find(x=>x.id===${o.id}))">Receipt</button></div></div>`).join("") : '<p class="mut">You have no orders yet. <a href="#/menu"><u>Order something tasty</u></a>.</p>'}</section>`;
+  return `<section class="wrap sec"><h2>My orders</h2>${l.length ? l.map(o => `<div class="card oc ${o.status === "Cancelled" ? "cx" : ""}"><div><b>Order #${o.id}</b><small>${when(o.date)}</small></div><div class="oi">${o.lines.map(x => `${x.emoji} ${esc(x.name)} x${x.qty}`).join(", ")}</div><div class="or"><b>${peso(o.total)}</b>${badge(o.status)}${o.status === "Cancelled" ? "<small>No charge</small>" : ""}<button class="btn alt sm" onclick="receipt(db.orders.find(x=>x.id===${o.id}))">Receipt</button></div></div>`).join("") : '<p class="mut">You have no orders yet. <a href="#/menu"><u>Order something tasty</u></a>.</p>'}</section>`;
 }
 function login() {
   const L = authTab === "login", f = (id, ph, t = "text") => `<input id="${id}" type="${t}" class="in" placeholder="${ph}" aria-label="${ph}">`;
@@ -109,7 +120,7 @@ function logout() { user = null; db.setSession(null); location.hash = "#/"; rout
 
 /* ---------- staff views ---------- */
 function ordersTable(l, ed) {
-  return `<div class="card tw"><table class="tbl"><tr><th>#</th><th>Customer</th><th>Items</th><th>Total</th><th>Paid with</th><th>Date</th><th>Status</th></tr>${l.length ? l.map(o => `<tr><td>${o.id}</td><td>${esc(o.customer)}</td><td>${o.lines.map(x => esc(x.name) + " x" + x.qty).join(", ")}</td><td>${peso(o.total)}</td><td>${o.method}</td><td>${when(o.date)}</td><td>${ed ? `<select class="in sm" aria-label="Status" onchange="setStatus(${o.id},this.value)">${Order.STATUSES.map(s => `<option ${s === o.status ? "selected" : ""}>${s}</option>`).join("")}</select>` : badge(o.status)}</td></tr>`).join("") : '<tr><td colspan="7" class="mut">No orders yet. They will appear here once customers check out.</td></tr>'}</table></div>`;
+  return `<div class="card tw"><table class="tbl"><tr><th>#</th><th>Customer</th><th>Items</th><th>Total</th><th>Paid with</th><th>Date</th><th>Status</th>${ed ? "<th></th>" : ""}</tr>${l.length ? l.map(o => `<tr><td>${o.id}</td><td>${esc(o.customer)}</td><td>${o.lines.map(x => esc(x.name) + " x" + x.qty).join(", ")}</td><td>${peso(o.total)}</td><td>${o.method}</td><td>${when(o.date)}</td><td>${ed ? `<select class="in sm" aria-label="Status" onchange="setStatus(${o.id},this.value)">${Order.STATUSES.map(s => `<option ${s === o.status ? "selected" : ""}>${s}</option>`).join("")}</select>` : badge(o.status)}</td>${ed ? `<td><button class="btn alt sm" onclick="receipt(db.orders.find(x=>x.id===${o.id}))">Receipt</button></td>` : ""}</tr>`).join("") : '<tr><td colspan="8" class="mut">No orders yet. They will appear here once customers check out.</td></tr>'}</table></div>`;
 }
 const adminViews = {
   dashboard() {
@@ -137,13 +148,14 @@ function admin(tab) {
 }
 function drawPay() {
   const q = $("#ps").value.toLowerCase(), m = $("#pf").value;
-  const l = db.orders.filter(o => o.status !== "Cancelled" && (m === "All" || o.method === m) && (String(o.id) + o.customer).toLowerCase().includes(q));
-  $("#pt").innerHTML = `<table class="tbl"><tr><th>Order #</th><th>Customer</th><th>Method</th><th>Amount</th><th>Date</th></tr>${l.length ? l.map(o => `<tr><td>${o.id}</td><td>${esc(o.customer)}</td><td>${o.method}</td><td>${peso(o.total)}</td><td>${when(o.date)}</td></tr>`).join("") : '<tr><td colspan="5" class="mut">No payments match.</td></tr>'}</table>`;
+  const l = db.orders.filter(o => (m === "All" || o.method === m) && (String(o.id) + o.customer).toLowerCase().includes(q));
+  $("#pt").innerHTML = `<table class="tbl"><tr><th>Order #</th><th>Customer</th><th>Method</th><th>Amount</th><th>Date</th><th>Status</th></tr>${l.length ? l.map(o => `<tr><td>${o.id}</td><td>${esc(o.customer)}</td><td>${o.method}</td><td>${peso(o.total)}</td><td>${when(o.date)}</td><td>${badge(o.status)}</td></tr>`).join("") : '<tr><td colspan="6" class="mut">No payments match.</td></tr>'}</table>`;
 }
 function setStatus(id, s) {
   const o = db.orders.find(x => x.id === id);
   if (o.status === "Cancelled") { toast("Cancelled orders cannot be changed.", 1); return route(); }
   if (s === "Cancelled") o.lines.forEach(l => { const p = db.product(l.pid); if (p) p.stock += l.qty; });
+  if (!o.cashier) o.cashier = user.name;
   o.status = s; db.save(); route(); toast("Order #" + id + " is now " + s);
 }
 function prodForm(id) {
