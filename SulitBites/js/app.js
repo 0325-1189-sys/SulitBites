@@ -4,6 +4,10 @@ const peso = n => "₱" + Number(n).toLocaleString("en-PH", { minimumFractionDig
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const when = d => new Date(d).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
 const badge = s => `<span class="bd ${s}">${s}</span>`;
+const canManage = () => user && user.canManageProducts;   // only the Admin class allows this
+const deny = () => toast("Only the admin can change products and stock.", 1);
+const avail = p => !p.inStock ? '<span class="av av-no">Out of stock</span>' : p.stock <= 5 ? `<span class="av av-low">Only ${p.stock} left</span>` : '<span class="av av-ok">Available</span>';
+const stockBadge = p => `<span class="bd ${{ "In stock": "Ready", "Low stock": "Pending", "Out of stock": "Cancelled" }[p.status]}">${p.status}</span>`;
 const db = new Store();
 let user = db.sessionUser(), authTab = "login";
 const mf = { cat: "All", q: "" };
@@ -22,11 +26,11 @@ function renderNav() {
   ${user ? `<div class="who">${esc(user.name)}<small>${user.role}</small></div><button class="btn sm" onclick="logout()">Logout</button>` : '<a class="btn sm" href="#/login">Login</a>'}</div></div>`;
 }
 
-const card = p => `<article class="card pc ${p.category}"><div class="thumb">${p.emoji}</div><div class="cb"><span class="tagp">${p.category}</span><h3>${esc(p.name)}</h3><p>${esc(p.desc)}</p>${p.promo ? `<small class="promo">${p.promo}</small>` : ""}<div class="row"><b class="price">${peso(p.price)}</b>${p.stock > 0 ? `<button class="btn sm" onclick="addCart(${p.id})">Add to cart</button>` : '<span class="mut">Sold out</span>'}</div></div></article>`;
+const card = p => `<article class="card pc ${p.category} ${p.inStock ? "" : "out"}"><div class="thumb">${p.emoji}</div><div class="cb"><div class="tags"><span class="tagp">${p.category}</span>${avail(p)}</div><h3>${esc(p.name)}</h3><p>${esc(p.desc)}</p>${p.promo ? `<small class="promo">${p.promo}</small>` : ""}<div class="row"><b class="price">${peso(p.price)}</b>${p.inStock ? `<button class="btn sm" onclick="addCart(${p.id})">Add to cart</button>` : '<span class="mut">Unavailable</span>'}</div></div></article>`;
 
 /* ---------- customer views ---------- */
 function home() {
-  const fav = db.products.filter(p => p.stock > 0).slice(0, 4), t = fav.slice(0, 3);
+  const fav = db.products.filter(p => p.inStock).slice(0, 4), t = fav.slice(0, 3);
   const sum = t.reduce((s, p) => s + p.price, 0);
   return `<section class="hero"><div class="wrap hero-in"><div><h1>Big flavor,<br>small price.</h1>
   <p>Burgers, fried chicken, drinks and desserts. Pick what you crave, pay your way, and track your order from the kitchen to your table.</p>
@@ -49,6 +53,7 @@ function grid() {
 }
 function addCart(id) {
   const p = db.product(id), line = db.cart.find(i => i.id === id);
+  if (!p.inStock) return toast(p.name + " is out of stock right now.", 1);
   if ((line ? line.qty : 0) + 1 > p.stock) return toast("Only " + p.stock + " left of " + p.name, 1);
   line ? line.qty++ : db.cart.push({ id, qty: 1 }); db.save(); renderNav(); toast(p.name + " added to cart");
 }
@@ -63,21 +68,27 @@ function cart() {
   const items = db.cartItems();
   if (!items.length) return `<section class="wrap sec empty"><div class="big">🛒</div><h2>Your cart is empty</h2><p class="mut">Add something delicious from the menu.</p><br><a class="btn lg" href="#/menu">Browse the menu</a></section>`;
   const raw = items.reduce((s, i) => s + i.product.price * i.qty, 0), total = items.reduce((s, i) => s + i.subtotal, 0);
-  return `<section class="wrap sec"><h2>Your cart</h2><div class="split"><div class="card">${items.map(i => `<div class="line"><span class="em">${i.product.emoji}</span><div class="li"><b>${esc(i.product.name)}</b><small>${peso(i.product.price)} each</small></div><div class="qty"><button aria-label="Less" onclick="chg(${i.product.id},-1)">−</button><span>${i.qty}</span><button aria-label="More" onclick="chg(${i.product.id},1)">+</button></div><b class="lt">${peso(i.subtotal)}</b><button class="x" aria-label="Remove" onclick="rm(${i.product.id})">✕</button></div>`).join("")}</div>
+  return `<section class="wrap sec"><h2>Your cart</h2><div class="split"><div class="card">${items.map(i => `<div class="line"><span class="em">${i.product.emoji}</span><div class="li"><b>${esc(i.product.name)}</b>${i.product.inStock ? "" : ' <span class="bd Cancelled">Out of stock</span>'}<small>${peso(i.product.price)} each</small></div><div class="qty"><button aria-label="Less" onclick="chg(${i.product.id},-1)">−</button><span>${i.qty}</span><button aria-label="More" onclick="chg(${i.product.id},1)">+</button></div><b class="lt">${peso(i.subtotal)}</b><button class="x" aria-label="Remove" onclick="rm(${i.product.id})">✕</button></div>`).join("")}</div>
   <aside class="card sum"><h3>Order summary</h3><div class="r"><span>Subtotal</span><span>${peso(raw)}</span></div><div class="r g"><span>Bulk discount</span><span>−${peso(raw - total)}</span></div><div class="r t"><span>Total</span><span>${peso(total)}</span></div>
   ${user && user.isStaff ? '<label for="cn">Customer name</label><input id="cn" class="in" placeholder="Walk-in customer">' : ""}<label for="pm">Payment method</label><select id="pm" class="in" onchange="pdHint()"><option>Cash</option><option>GCash</option><option>Card</option></select><input id="pd" class="in" placeholder="Cash amount, e.g. 500"><button class="btn lg full" onclick="checkout()">${user ? "Place order" : "Login to checkout"}</button></aside></div></section>`;
 }
 function pdHint() { $("#pd").placeholder = { Cash: "Cash amount, e.g. 500", GCash: "GCash number, 09XXXXXXXXX", Card: "16-digit card number" }[$("#pm").value]; }
-function checkout() {
+async function checkout() {   // ignore double clicks while the order is being placed
+  if (checkout.busy) return; checkout.busy = true;
+  try { await placeOrder(); } finally { checkout.busy = false; }
+}
+async function placeOrder() {
   if (!user) { location.hash = "#/login"; return; }
-  const items = db.cartItems(), bad = items.find(i => i.qty > i.product.stock);
-  if (bad) return toast("Not enough stock for " + bad.product.name, 1);
+  const method = $("#pm").value, detail = $("#pd").value, typed = user.isStaff ? $("#cn").value.trim() : "";
+  if (db.cloud) await sync();   // newest stock and order numbers from the shared database
+  const items = db.cartItems(), bad = items.find(i => !i.product.inStock || i.qty > i.product.stock);
+  if (bad) return toast(bad.product.inStock ? "Not enough stock for " + bad.product.name : bad.product.name + " is out of stock. Remove it from your cart.", 1);
   const total = items.reduce((s, i) => s + i.subtotal, 0);
-  const Pay = { Cash: CashPayment, GCash: GCashPayment, Card: CardPayment }[$("#pm").value];   // polymorphism
-  const pay = new Pay(total, $("#pd").value);
+  const Pay = { Cash: CashPayment, GCash: GCashPayment, Card: CardPayment }[method];   // polymorphism
+  const pay = new Pay(total, detail);
   try { pay.process(); } catch (e) { return toast(e.message, 1); }
   items.forEach(i => i.product.stock -= i.qty);
-  const walk = user.isStaff, cn = walk ? ($("#cn").value.trim() || "Walk-in customer") : user.name;
+  const walk = user.isStaff, cn = walk ? (typed || "Walk-in customer") : user.name;
   const o = new Order({ id: db.nextOrderId(), username: user.username, customer: cn, method: pay.method, change: pay.change,
     type: walk ? "Walk-in" : "Online order", cashier: walk ? user.name : "",
     lines: items.map(i => ({ pid: i.product.id, name: i.product.name, emoji: i.product.emoji, qty: i.qty, price: i.product.price, subtotal: i.subtotal })) });
@@ -109,17 +120,21 @@ function login() {
   return `<section class="auth"><div class="card ac"><div class="tabs"><button class="pill ${L ? "on" : ""}" onclick="authTab='login';route()">Login</button><button class="pill ${!L ? "on" : ""}" onclick="authTab='reg';route()">Register</button></div>
   ${L ? `<h2>Welcome back</h2><br>${f("u", "Username")}${f("p", "Password", "password")}<br><button class="btn lg full" onclick="doLogin()">Login</button><p class="hint">Demo accounts: admin / admin123, cashier / cashier123, juan / juan123</p>` : `<h2>Create your account</h2><br>${f("n", "Full name")}${f("u", "Username")}${f("p", "Password (4+ characters)", "password")}<br><button class="btn lg full" onclick="doReg()">Create account</button>`}</div></section>`;
 }
-function doLogin() {
-  const u = db.findUser($("#u").value.trim());
-  if (!u || !u.checkPassword($("#p").value)) return toast("Wrong username or password. Check both and try again.", 1);
+async function doLogin() {
+  const name = $("#u").value.trim(), pw = $("#p").value;
+  await sync();   // get the newest accounts from the shared database first
+  const u = db.findUser(name);
+  if (!u || !(await u.verify(pw))) return toast("Wrong username or password. Check both and try again.", 1);
   user = u; db.setSession(u.username); toast("Welcome, " + u.name); location.hash = u.isStaff ? "#/admin/dashboard" : "#/menu";
 }
-function doReg() {
+async function doReg() {
   const n = $("#n").value.trim(), u = $("#u").value.trim(), p = $("#p").value;
   if (!n || !u || p.length < 4) return toast("Fill in every field. Password needs 4 or more characters.", 1);
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(u)) return toast("Username must be 3 to 20 letters, numbers or underscores.", 1);
+  await sync();
   if (db.findUser(u)) return toast("That username is taken. Pick another one.", 1);
-  db.users.push(new Customer(u, p, n)); db.save(); $("#u").value = u; $("#p").value = p; authTab = "login"; user = db.findUser(u); db.setSession(u);
-  toast("Account created"); location.hash = "#/menu";
+  db.users.push(new Customer(u, await User.hash(p), n)); db.save();
+  user = db.findUser(u); db.setSession(u); toast("Account created"); location.hash = "#/menu";
 }
 function logout() { user = null; db.setSession(null); location.hash = "#/"; route(); }
 
@@ -132,16 +147,16 @@ const adminViews = {
     const ok = db.orders.filter(o => o.status !== "Cancelled"), by = {}, best = {};
     ok.forEach(o => { by[o.method] = (by[o.method] || 0) + o.total; o.lines.forEach(l => best[l.name] = (best[l.name] || 0) + l.qty); });
     const bars = (obj, fmt) => { const e = Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, 5), m = Math.max(...e.map(x => x[1]), 1); return e.length ? e.map(([k, v]) => `<div class="bar"><span>${esc(k)}</span><div><i style="width:${v / m * 100}%"></i></div><b>${fmt(v)}</b></div>`).join("") : '<p class="mut">No sales yet.</p>'; };
-    return `<h2>Dashboard</h2><div class="stats4">${[["Total sales", peso(ok.reduce((s, o) => s + o.total, 0))], ["Orders", db.orders.length], ["Pending", db.orders.filter(o => o.status === "Pending").length], ["Products", db.products.length]].map(s => `<div class="card st"><span>${s[0]}</span><b>${s[1]}</b></div>`).join("")}</div>
+    return `<h2>Dashboard</h2><div class="stats4">${[["Total sales", peso(ok.reduce((s, o) => s + o.total, 0))], ["Orders", db.orders.length], ["Pending", db.orders.filter(o => o.status === "Pending").length], ["Products", db.products.length], ["Low or out of stock", db.products.filter(p => p.status !== "In stock").length]].map(s => `<div class="card st"><span>${s[0]}</span><b>${s[1]}</b></div>`).join("")}</div>
     <div class="two"><div class="card pad"><h3>Best sellers</h3>${bars(best, v => v + " sold")}</div><div class="card pad"><h3>Sales by payment</h3>${bars(by, peso)}</div></div><h3 class="mt">Recent orders</h3><br>${ordersTable(db.orders.slice(0, 5), false)}`;
   },
   products() {
-    return `<div class="sh"><h2>Products</h2><button class="btn sm" onclick="prodForm()">Add product</button></div><div class="card tw"><table class="tbl"><tr><th></th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th></th></tr>${db.products.map(p => `<tr><td class="em">${p.emoji}</td><td>${esc(p.name)}</td><td>${p.category}</td><td>${peso(p.price)}</td><td>${p.stock}</td><td class="act"><button class="btn alt sm" onclick="prodForm(${p.id})">Edit</button> <button class="btn alt sm" onclick="delProd(${p.id})">Delete</button></td></tr>`).join("")}</table></div>`;
+    return `<div class="sh"><h2>Products</h2><button class="btn sm" onclick="prodForm()">Add product</button></div><div class="card tw"><table class="tbl"><tr><th></th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th></th></tr>${db.products.map(p => `<tr><td class="em">${p.emoji}</td><td>${esc(p.name)}</td><td>${p.category}</td><td>${peso(p.price)}</td><td>${p.stock}</td><td>${stockBadge(p)}</td><td class="act"><button class="btn alt sm" onclick="restock(${p.id})">Edit stock</button> <button class="btn alt sm" onclick="toggleStock(${p.id})">${p.available ? "Mark out of stock" : "Mark available"}</button> <button class="btn alt sm" onclick="prodForm(${p.id})">Edit details</button> <button class="btn alt sm" onclick="delProd(${p.id})">Delete</button></td></tr>`).join("")}</table></div>`;
   },
   orders() { return "<h2>Orders</h2><br>" + ordersTable(db.orders, true); },
   customers() {
     const l = db.users.filter(u => !u.isStaff);
-    return `<h2>Customers</h2><p class="mut">${l.length} registered ${l.length === 1 ? "account" : "accounts"} saved in this browser.</p><br><div class="card tw"><table class="tbl"><tr><th>Name</th><th>Username</th><th>Orders</th><th>Total spent</th></tr>${l.map(u => { const o = db.orders.filter(x => x.username === u.username && x.status !== "Cancelled"); return `<tr><td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${o.length}</td><td>${peso(o.reduce((s, x) => s + x.total, 0))}</td></tr>`; }).join("")}</table></div>`;
+    return `<h2>Customers</h2><p class="mut">${l.length} registered ${l.length === 1 ? "account" : "accounts"} ${db.cloud ? "in the shared database" : "saved in this browser"}.</p><br><div class="card tw"><table class="tbl"><tr><th>Name</th><th>Username</th><th>Orders</th><th>Total spent</th></tr>${l.map(u => { const o = db.orders.filter(x => x.username === u.username && x.status !== "Cancelled"); return `<tr><td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${o.length}</td><td>${peso(o.reduce((s, x) => s + x.total, 0))}</td></tr>`; }).join("")}</table></div>`;
   },
   payments() {
     return `<h2>Payment records</h2><div class="sh mt"><input class="in sm" id="ps" aria-label="Search" placeholder="Search order or customer" oninput="drawPay()"><select class="in sm" id="pf" aria-label="Method" onchange="drawPay()"><option>All</option><option>Cash</option><option>GCash</option><option>Card</option></select></div><div class="card tw" id="pt"></div>`;
@@ -164,12 +179,14 @@ function setStatus(id, s) {
   o.status = s; db.save(); route(); toast("Order #" + id + " is now " + s);
 }
 function prodForm(id) {
+  if (!canManage()) return deny();
   const p = id ? db.product(id) : null;
   modal(`<h2>${p ? "Edit" : "Add"} product</h2><input id="fn" class="in" placeholder="Name" aria-label="Name" value="${p ? esc(p.name) : ""}"><select id="fc" class="in" aria-label="Category" ${p ? "disabled" : ""}>${["Meal", "Drink", "Dessert"].map(c => `<option ${p && p.category === c ? "selected" : ""}>${c}</option>`).join("")}</select>
   <div class="two2"><input id="fp" class="in" type="number" step="0.01" placeholder="Price" aria-label="Price" value="${p ? p.price : ""}"><input id="fs" class="in" type="number" placeholder="Stock" aria-label="Stock" value="${p ? p.stock : ""}"></div>
   <input id="fe" class="in" placeholder="Emoji, e.g. 🍔" aria-label="Emoji" value="${p ? p.emoji : "🍽️"}"><input id="fd" class="in" placeholder="Short description" aria-label="Description" value="${p ? esc(p.desc) : ""}"><br><div class="two2"><button class="btn alt" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveProd(${id || 0})">Save product</button></div>`);
 }
 function saveProd(id) {
+  if (!canManage()) return deny();
   const v = i => $("#" + i).value.trim();
   try {
     if (!v("fn")) throw new Error("Enter a product name.");
@@ -178,16 +195,82 @@ function saveProd(id) {
     db.save(); closeModal(); route(); toast("Product saved");
   } catch (e) { toast(e.message, 1); }
 }
-function delProd(id) { if (confirm("Delete this product?")) { db.products = db.products.filter(p => p.id !== id); db.save(); route(); toast("Product deleted"); } }
+let stockMode = "add";
+function restock(id) {   // opens the stock editor
+  if (!canManage()) return deny();
+  stockMode = "add"; const p = db.product(id);
+  modal(`<div class="sk"><div class="skh"><span class="em">${p.emoji}</span><div><h2>${esc(p.name)}</h2>${stockBadge(p)}</div></div>
+  <div class="skc"><span>Current stock</span><b>${p.stock}</b></div>
+  <div class="pills"><button class="pill on" id="sm-add" onclick="stockMode='add';stockUI(${id})">Add stock</button><button class="pill" id="sm-set" onclick="stockMode='set';stockUI(${id})">Set exact stock</button></div>
+  <div class="qtybig"><button aria-label="Less" onclick="stockStep(-1,${id})">−</button><input id="sq" type="number" min="0" value="10" aria-label="Quantity" oninput="stockUI(${id})"><button aria-label="More" onclick="stockStep(1,${id})">+</button></div>
+  <div class="chips" id="chips"></div><div class="skp" id="skp"></div>
+  <label class="sw"><input type="checkbox" id="sa" ${p.available ? "checked" : ""}> Available to customers</label>
+  <div class="two2"><button class="btn alt" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveStock(${id})">Save stock</button></div></div>`);
+  stockUI(id);
+}
+function stockStep(d, id) { const i = $("#sq"); i.value = Math.max(0, (parseInt(i.value, 10) || 0) + d); stockUI(id); }
+function stockSet(n, id) { $("#sq").value = n; stockUI(id); }
+function stockNext(p) {
+  const n = parseInt($("#sq").value, 10);
+  if (!Number.isInteger(n) || n < 0 || (stockMode === "add" && n < 1)) return null;
+  return stockMode === "add" ? p.stock + n : n;
+}
+function stockUI(id) {
+  const p = db.product(id), add = stockMode === "add", next = stockNext(p);
+  $("#sm-add").classList.toggle("on", add); $("#sm-set").classList.toggle("on", !add);
+  $("#chips").innerHTML = (add ? [5, 10, 20, 50] : [0, 10, 25, 50]).map(n => `<button class="chip" onclick="stockSet(${n},${id})">${add ? "+" + n : n}</button>`).join("");
+  $("#skp").innerHTML = next === null ? "Enter a whole number" + (add ? " of 1 or more." : ", 0 or more.") : `New stock: <b>${next}</b> ${next === 0 ? "(Out of stock)" : next <= 5 ? "(Low stock)" : ""}`;
+}
+function saveStock(id) {
+  if (!canManage()) return deny();
+  const p = db.product(id), next = stockNext(p);
+  if (next === null) return toast("Enter a valid quantity first.", 1);
+  p.stock = next; p.available = $("#sa").checked; db.save(); closeModal(); route();
+  toast(p.name + ": stock is now " + p.stock + (p.available ? "." : ", hidden from customers."));
+}
+function toggleStock(id) {
+  if (!canManage()) return deny();
+  const p = db.product(id); p.available = !p.available; db.save(); route();
+  if (!p.available) toast(p.name + " is now marked out of stock.");
+  else if (p.stock === 0) toast(p.name + " is available again, but its stock is 0. Click Edit stock to add some.", 1);
+  else toast(p.name + " is available again.");
+}
+function delProd(id) {
+  if (!canManage()) return deny();
+  const p = db.product(id);
+  modal(`<h2>Delete ${esc(p.name)}?</h2><p class="mut">This removes it from the menu and cannot be undone.</p><br><div class="two2"><button class="btn alt" onclick="closeModal()">Keep it</button><button class="btn" onclick="confirmDel(${id})">Delete</button></div>`);
+}
+function confirmDel(id) {
+  if (!canManage()) return deny();
+  db.products = db.products.filter(p => p.id !== id); db.save(); closeModal(); route(); toast("Product deleted");
+}
+
+/* ---------- shared database sync ---------- */
+async function sync() {
+  const changed = await db.pull();
+  if (user) user = db.findUser(user.username) || user;
+  syncBadge(); return changed;
+}
+function syncBadge() {
+  const e = $("#sync");
+  if (e) e.textContent = !db.cloud ? "Local mode: data stays on this device." : db.online ? "Online: shared database connected." : "Offline: changes are saved on this device and will sync later.";
+}
+function liveRefresh() {   // redraw after new data arrives, but never while someone is typing or a window is open
+  const pg = location.hash.split("/")[1] || "home", a = document.activeElement;
+  if (["home", "menu", "orders", "admin"].includes(pg) && $("#modal").classList.contains("hidden") && !(a && /INPUT|SELECT|TEXTAREA/.test(a.tagName))) route(true);
+  else renderNav();
+}
 
 /* ---------- router ---------- */
-function route() {
+function route(soft) {
   const [, page = "home", arg] = location.hash.replace("#", "").split("/");
   let html;
   if (page === "admin") { if (!user || !user.isStaff) { location.hash = "#/login"; return; } html = admin(arg); }
   else if (page === "orders" && !user) { location.hash = "#/login"; return; }
   else html = ({ home, menu, cart, orders, login }[page] || home)(arg);
-  $("#app").innerHTML = html; renderNav(); window.scrollTo(0, 0);
+  $("#app").innerHTML = html; renderNav(); if (!soft) window.scrollTo(0, 0);
   if ($("#grid")) grid(); if ($("#pt")) drawPay();
 }
-window.addEventListener("hashchange", route); route();
+window.addEventListener("hashchange", () => route()); route(); syncBadge();
+const ready = db.secure().then(async () => { if (db.cloud && await sync()) liveRefresh(); });
+if (db.cloud) setInterval(async () => { if (!document.hidden && await sync()) liveRefresh(); }, 8000);
