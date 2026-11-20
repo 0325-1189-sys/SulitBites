@@ -69,3 +69,4 @@ footer{background:var(--ink);color:#c9c9d0;text-align:center;padding:26px;font-s
 .oc.cx .oi{text-decoration:line-through;color:var(--mut)}.oc.cx b{color:var(--mut)}
 @media print{body *{visibility:hidden}#modal,#modal *{visibility:visible}#modal{position:absolute;left:0;top:0;width:100%;display:block;background:none;padding:0}
 .box{border:0;box-shadow:none;width:80mm;margin:0 auto;padding:0;max-height:none;overflow:visible}.noprint{display:none!important}.stamp{color:#000;border-color:#000}.bd{border-color:#000;background:#fff!important;color:#000!important}.mut,.rh p{color:#000}@page{margin:6mm}}
+@media print{#modal.nop,#modal.nop *{visibility:hidden!important}}

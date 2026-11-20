@@ -85,7 +85,7 @@ function checkout() {
 }
 function receipt(o) {
   if (user && user.isStaff && !o.cashier) { o.cashier = user.name; db.save(); }   // the staff who issues the receipt is the cashier
-  const x = o.status === "Cancelled", site = location.host || STORE.name + " website";
+  const x = o.status === "Cancelled", staff = user && user.isStaff, site = location.host || STORE.name + " website";
   const row = (l, v, c = "") => `<div class="r ${c}"><span>${l}</span><span>${v}</span></div>`;
   modal(`<div class="rc"><div class="rh"><div class="rlogo">🍔</div><h2>${STORE.name}</h2><p>${STORE.branch}<br>${STORE.address}<br>${site}</p></div><div class="tdash"></div>
   ${x ? '<div class="stamp">CANCELLED</div>' : ""}${row("Receipt no.", "#" + o.id)}${row("Date and time", when(o.date))}${row("Cashier", esc(o.cashier || "Not yet assigned"))}${row("Customer", esc(o.customer))}${row("Order type", o.type)}<div class="tdash"></div>
@@ -93,7 +93,12 @@ function receipt(o) {
   ${row("Subtotal", peso(o.gross))}${o.discount > 0.005 ? row("Bulk discount", "-" + peso(o.discount)) : ""}${x ? row("Order cancelled", "-" + peso(o.billed)) : ""}${row("Total", peso(o.total), "t")}
   ${x ? row("Payment", "None, no charge") : row("Paid with", o.method) + (o.method === "Cash" ? row("Cash received", peso(o.billed + o.change)) + row("Change", peso(o.change)) : "")}${row("Status", badge(o.status))}
   <div class="tdash"></div><p class="thx">Thank you for ordering!<br>${STORE.name}<br>${site}</p></div>
-  <div class="two2 noprint"><button class="btn alt" onclick="closeModal()">Close</button><button class="btn" onclick="window.print()">Print receipt</button></div>`);
+  <div class="${staff ? "two2" : ""} noprint"><button class="btn alt full" onclick="closeModal()">Close</button>${staff ? '<button class="btn full" onclick="printReceipt()">Print receipt</button>' : ""}</div>${staff ? "" : '<p class="hint noprint">Printed copies are handed out by the cashier.</p>'}`);
+  $("#modal").classList.toggle("nop", !staff);   // customers cannot print, even with Ctrl+P
+}
+function printReceipt() {
+  if (!user || !user.isStaff) return toast("Only the cashier or admin can print receipts.", 1);
+  window.print();
 }
 function orders() {
   const l = db.orders.filter(o => o.username === user.username);
