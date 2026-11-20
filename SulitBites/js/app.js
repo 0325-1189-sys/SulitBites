@@ -118,7 +118,7 @@ function orders() {
 function login() {
   const L = authTab === "login", f = (id, ph, t = "text") => `<input id="${id}" type="${t}" class="in" placeholder="${ph}" aria-label="${ph}">`;
   return `<section class="auth"><div class="card ac"><div class="tabs"><button class="pill ${L ? "on" : ""}" onclick="authTab='login';route()">Login</button><button class="pill ${!L ? "on" : ""}" onclick="authTab='reg';route()">Register</button></div>
-  ${L ? `<h2>Welcome back</h2><br>${f("u", "Username")}${f("p", "Password", "password")}<br><button class="btn lg full" onclick="doLogin()">Login</button><p class="hint">Demo accounts: admin / admin123, cashier / cashier123, juan / juan123</p>` : `<h2>Create your account</h2><br>${f("n", "Full name")}${f("u", "Username")}${f("p", "Password (4+ characters)", "password")}<br><button class="btn lg full" onclick="doReg()">Create account</button>`}</div></section>`;
+  ${L ? `<h2>Welcome back</h2><br>${f("u", "Username")}${f("p", "Password", "password")}<br><button class="btn lg full" onclick="doLogin()">Login</button>` : `<h2>Create your account</h2><br>${f("n", "Full name")}${f("u", "Username")}${f("p", "Password (4+ characters)", "password")}<br><button class="btn lg full" onclick="doReg()">Create account</button><p class="hint">Username: 3 to 20 letters, numbers or underscores.</p>`}</div></section>`;
 }
 async function doLogin() {
   const name = $("#u").value.trim(), pw = $("#p").value;
@@ -170,6 +170,7 @@ function drawPay() {
   const q = $("#ps").value.toLowerCase(), m = $("#pf").value;
   const l = db.orders.filter(o => (m === "All" || o.method === m) && (String(o.id) + o.customer).toLowerCase().includes(q));
   $("#pt").innerHTML = `<table class="tbl"><tr><th>Order #</th><th>Customer</th><th>Method</th><th>Amount</th><th>Date</th><th>Status</th></tr>${l.length ? l.map(o => `<tr><td>${o.id}</td><td>${esc(o.customer)}</td><td>${o.method}</td><td>${peso(o.total)}</td><td>${when(o.date)}</td><td>${badge(o.status)}</td></tr>`).join("") : '<tr><td colspan="6" class="mut">No payments match.</td></tr>'}</table>`;
+  labelCells();
 }
 function setStatus(id, s) {
   const o = db.orders.find(x => x.id === id);
@@ -178,20 +179,38 @@ function setStatus(id, s) {
   if (!o.cashier) o.cashier = user.name;
   o.status = s; db.save(); route(); toast("Order #" + id + " is now " + s);
 }
+const EMOJIS = ["🍔","🍟","🍗","🍕","🌭","🥪","🍝","🍛","🍜","🥗","🥤","🧋","☕","🧃","🍧","🍮","🍨","🍩","🍰","🍪"];
+let pf = { cat: "Meal", emoji: "🍔", edit: false };   // state of the product form
 function prodForm(id) {
   if (!canManage()) return deny();
   const p = id ? db.product(id) : null;
-  modal(`<h2>${p ? "Edit" : "Add"} product</h2><input id="fn" class="in" placeholder="Name" aria-label="Name" value="${p ? esc(p.name) : ""}"><select id="fc" class="in" aria-label="Category" ${p ? "disabled" : ""}>${["Meal", "Drink", "Dessert"].map(c => `<option ${p && p.category === c ? "selected" : ""}>${c}</option>`).join("")}</select>
-  <div class="two2"><input id="fp" class="in" type="number" step="0.01" placeholder="Price" aria-label="Price" value="${p ? p.price : ""}"><input id="fs" class="in" type="number" placeholder="Stock" aria-label="Stock" value="${p ? p.stock : ""}"></div>
-  <input id="fe" class="in" placeholder="Emoji, e.g. 🍔" aria-label="Emoji" value="${p ? p.emoji : "🍽️"}"><input id="fd" class="in" placeholder="Short description" aria-label="Description" value="${p ? esc(p.desc) : ""}"><br><div class="two2"><button class="btn alt" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveProd(${id || 0})">Save product</button></div>`);
+  pf = { cat: p ? p.category : "Meal", emoji: p ? p.emoji : "🍔", edit: !!p };
+  modal(`<div class="pf"><h2>${p ? "Edit details" : "Add a new product"}</h2><p class="mut">${p ? "Change the name, price, stock or emoji." : "It shows on the menu right after you save."}</p>
+  <div class="pfprev" id="pfprev"></div>
+  <label for="fn">Product name</label><input id="fn" class="in" placeholder="e.g. Cheese Burger" value="${p ? esc(p.name) : ""}" oninput="pfPrev()">
+  <label>Category</label><div class="pills" id="pfcat"></div>
+  <div class="two2"><div><label for="fp">Price (₱)</label><input id="fp" class="in" type="number" min="0" step="0.01" placeholder="0.00" value="${p ? p.price : ""}" oninput="pfPrev()"></div><div><label for="fs">Stock</label><input id="fs" class="in" type="number" min="0" placeholder="0" value="${p ? p.stock : ""}"></div></div>
+  <label>Pick an emoji</label><div class="emojis" id="pfem"></div><input id="fe" class="in" maxlength="4" placeholder="Or type your own emoji" oninput="if(this.value.trim()){pf.emoji=this.value.trim();pfDraw()}">
+  <label for="fd">Short description</label><input id="fd" class="in" placeholder="Describe it in a few words" value="${p ? esc(p.desc) : ""}" oninput="pfPrev()">
+  <div class="two2 pfb"><button class="btn alt" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveProd(${id || 0})">${p ? "Save changes" : "Add to menu"}</button></div></div>`);
+  pfDraw();
+}
+function pfDraw() {
+  $("#pfcat").innerHTML = ["Meal", "Drink", "Dessert"].map(c => `<button class="pill ${pf.cat === c ? "on" : ""}" ${pf.edit ? "disabled" : ""} onclick="pf.cat='${c}';pfDraw()">${c}</button>`).join("");
+  $("#pfem").innerHTML = EMOJIS.map(e => `<button class="emo ${pf.emoji === e ? "on" : ""}" onclick="pf.emoji='${e}';pfDraw()">${e}</button>`).join("");
+  pfPrev();
+}
+function pfPrev() {   // live preview of the menu item
+  const v = i => $("#" + i) ? String($("#" + i).value).trim() : "";
+  $("#pfprev").innerHTML = `<div class="thumb pv-${pf.cat}">${pf.emoji}</div><div><b>${esc(v("fn") || "Product name")}</b><br><span class="price">${peso(Number(v("fp")) || 0)}</span><br><small class="mut">${esc(v("fd") || "Short description")}</small></div>`;
 }
 function saveProd(id) {
   if (!canManage()) return deny();
   const v = i => $("#" + i).value.trim();
   try {
     if (!v("fn")) throw new Error("Enter a product name.");
-    if (id) { const p = db.product(id); p.name = v("fn"); p.price = v("fp"); p.stock = v("fs"); p.emoji = v("fe") || "🍽️"; p.desc = v("fd"); }
-    else db.products.push(new ({ Meal, Drink, Dessert }[$("#fc").value])(db.nextProductId(), v("fn"), v("fp"), v("fs"), v("fe") || "🍽️", v("fd")));
+    if (id) { const p = db.product(id); p.name = v("fn"); p.price = v("fp"); p.stock = v("fs"); p.emoji = pf.emoji || "🍽️"; p.desc = v("fd"); }
+    else db.products.push(new ({ Meal, Drink, Dessert }[pf.cat])(db.nextProductId(), v("fn"), v("fp"), v("fs"), pf.emoji || "🍽️", v("fd")));
     db.save(); closeModal(); route(); toast("Product saved");
   } catch (e) { toast(e.message, 1); }
 }
@@ -261,6 +280,14 @@ function liveRefresh() {   // redraw after new data arrives, but never while som
   else renderNav();
 }
 
+function labelCells() {   // on phones every table row becomes a card; each cell is labelled with its column name
+  if (!document.querySelectorAll) return;
+  document.querySelectorAll(".tbl").forEach(t => {
+    const h = [...t.rows[0].cells].map(c => c.textContent.trim());
+    [...t.rows].slice(1).forEach(r => [...r.cells].forEach((c, i) => { if (c.colSpan < 2) c.setAttribute("data-label", h[i] || ""); }));
+  });
+}
+
 /* ---------- router ---------- */
 function route(soft) {
   const [, page = "home", arg] = location.hash.replace("#", "").split("/");
@@ -270,6 +297,7 @@ function route(soft) {
   else html = ({ home, menu, cart, orders, login }[page] || home)(arg);
   $("#app").innerHTML = html; renderNav(); if (!soft) window.scrollTo(0, 0);
   if ($("#grid")) grid(); if ($("#pt")) drawPay();
+  labelCells();
 }
 window.addEventListener("hashchange", () => route()); route(); syncBadge();
 const ready = db.secure().then(async () => { if (db.cloud && await sync()) liveRefresh(); });
