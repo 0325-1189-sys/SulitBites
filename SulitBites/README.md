@@ -1,24 +1,25 @@
-# Sulit Bites - Food Ordering Management System (Web)
-OOP Final Project, Scenario 4. Plain HTML, CSS and JavaScript (ES6 classes). No installation needed.
+# SulitBites Java Web App
+
+SulitBites is a Java-only server-rendered web application. The backend, OOP domain model, routing, forms, and HTML rendering are written in Java. It uses HTML forms and CSS for the browser interface and does not use JavaScript.
 
 ## Run locally
-Double-click `index.html`.
+
+Requirements: JDK 17 or newer.
+
+```bash
+rm -rf out
+javac -d out $(find src -name "*.java")
+PORT=3000 java -cp out com.sulitbites.Main
+```
+
+Then open `http://localhost:3000`.
 
 ## Demo accounts
-| Role | Username | Password |
-|---|---|---|
-| Admin | admin | admin123 |
-| Cashier | cashier | cashier123 |
-| Customer | juan | juan123 |
 
-## Four Pillars (js/models.js)
-- **Abstraction**: `User`, `FoodProduct`, `Payment` are abstract.
-- **Inheritance**: Admin/Cashier/Customer, Meal/Drink/Dessert, CashPayment/GCashPayment/CardPayment.
-- **Polymorphism**: `total()`, `promo`, `validate()`, `adminTabs` differ per subclass.
-- **Encapsulation**: `#private` fields with validated setters (price, stock, password).
+- Admin: `admin` / `admin123`
+- Cashier: `cashier` / `cashier123`
+- Customer: `juan` / `juan123`
 
-## Shared database (so every device sees the same accounts and orders)
-1. Create a free Firebase project and a Realtime Database (Rules: `{"rules":{".read":true,".write":true}}`).
-2. Paste the database URL in `js/config.js`, then deploy again.
-3. Open the site on the device that already has your data first. It uploads everything; other devices then download it.
-Passwords are stored as SHA-256 hashes. The database rules are open for demo use, so do not use real passwords.
+## OOP structure
+
+`User`, `FoodProduct`, and `Payment` are abstract classes. Admin, Cashier, Customer, Meal, Drink, Dessert, and payment classes inherit from them. Product totals and payment validation use polymorphism, while private fields and validated methods provide encapsulation.
