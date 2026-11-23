@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: sulitbites
+    runtime: docker
+    plan: free
+    envVars:
+      - key: FIREBASE_URL
+        value: https://sulitbites-5f418-default-rtdb.firebaseio.com
