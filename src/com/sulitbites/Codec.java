@@ -30,7 +30,14 @@ final class Codec {
     }
 
     private static String str(Object o, String def) { return o == null ? def : o.toString(); }
-    private static double num(Object o) { return o instanceof Number ? ((Number) o).doubleValue() : Double.parseDouble(String.valueOf(o)); }
+    /** A number that must be there. */
+    private static double num(Object o) { if (o == null) throw new IllegalArgumentException("a required number is missing"); return num(o, 0); }
+    /** A number that may be missing (old records): uses the default instead. */
+    private static double num(Object o, double def) {
+        if (o == null) return def;
+        if (o instanceof Number) return ((Number) o).doubleValue();
+        try { return Double.parseDouble(o.toString().trim()); } catch (NumberFormatException e) { return def; }
+    }
     @SuppressWarnings("unchecked") private static Map<String, Object> map(Object o) { return (Map<String, Object>) o; }
 
     static User user(Map<String, Object> m) { return User.create(str(m.get("role"), "Customer"), str(m.get("username"), ""), str(m.get("password"), ""), str(m.get("name"), "")); }
@@ -42,9 +49,12 @@ final class Codec {
         List<OrderLine> lines = new ArrayList<>();
         Object raw = m.get("lines");
         Collection<?> src = raw instanceof List ? (List<?>) raw : raw instanceof Map ? ((Map<?, ?>) raw).values() : List.of();
-        for (Object o : src) { Map<String, Object> x = map(o); lines.add(new OrderLine((int) num(x.get("pid")), str(x.get("name"), ""), str(x.get("emoji"), ""), (int) num(x.get("qty")), num(x.get("price")), num(x.get("subtotal")))); }
+        for (Object o : src) {                                    // older orders may not have pid or price: fill them in
+            Map<String, Object> x = map(o); int qty = (int) num(x.get("qty"), 1); double sub = num(x.get("subtotal"), 0);
+            lines.add(new OrderLine((int) num(x.get("pid"), 0), str(x.get("name"), ""), str(x.get("emoji"), ""), qty, num(x.get("price"), qty > 0 ? sub / qty : 0), sub));
+        }
         return new Order((int) num(m.get("id")), str(m.get("username"), ""), str(m.get("customer"), ""), str(m.get("type"), "Online order"), str(m.get("cashier"), ""),
-            str(m.get("method"), "Cash"), m.get("change") == null ? 0 : num(m.get("change")), Instant.parse(str(m.get("date"), Instant.now().toString())), lines, Order.Status.fromLabel(str(m.get("status"), "Pending")));
+            str(m.get("method"), "Cash"), num(m.get("change"), 0), Instant.parse(str(m.get("date"), Instant.now().toString())), lines, Order.Status.fromLabel(str(m.get("status"), "Pending")));
     }
 
     /** Every record as one flat map ("orders/o1001" -> JSON text). Used to find out what changed. */
@@ -67,9 +77,9 @@ final class Codec {
         List<User> us = new ArrayList<>(); List<FoodProduct> ps = new ArrayList<>(); List<Order> os = new ArrayList<>();
         if (root instanceof Map) {
             Map<String, Object> r = map(root);
-            if (r.get("users") instanceof Map) for (Object o : map(r.get("users")).values()) try { us.add(user(map(o))); } catch (RuntimeException e) { System.err.println("Skipped a bad user: " + e.getMessage()); }
-            if (r.get("products") instanceof Map) for (Object o : map(r.get("products")).values()) try { ps.add(product(map(o))); } catch (RuntimeException e) { System.err.println("Skipped a bad product: " + e.getMessage()); }
-            if (r.get("orders") instanceof Map) for (Object o : map(r.get("orders")).values()) try { os.add(order(map(o))); } catch (RuntimeException e) { System.err.println("Skipped a bad order: " + e.getMessage()); }
+            if (r.get("users") instanceof Map) for (Map.Entry<String, Object> en : map(r.get("users")).entrySet()) try { us.add(user(map(en.getValue()))); } catch (RuntimeException e) { System.err.println("Skipped a bad user (" + en.getKey() + "): " + e.getMessage()); }
+            if (r.get("products") instanceof Map) for (Map.Entry<String, Object> en : map(r.get("products")).entrySet()) try { ps.add(product(map(en.getValue()))); } catch (RuntimeException e) { System.err.println("Skipped a bad product (" + en.getKey() + "): " + e.getMessage()); }
+            if (r.get("orders") instanceof Map) for (Map.Entry<String, Object> en : map(r.get("orders")).entrySet()) try { os.add(order(map(en.getValue()))); } catch (RuntimeException e) { System.err.println("Skipped a bad order (" + en.getKey() + "): " + e.getMessage()); }
         }
         ps.sort(Comparator.comparingInt(FoodProduct::getId)); os.sort((a, b) -> b.getId() - a.getId());
         s.replaceAll(us, ps, os);

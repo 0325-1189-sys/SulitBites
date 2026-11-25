@@ -72,6 +72,13 @@ public final class Store {
     }
     public void toggleAvailable(int id) { FoodProduct p = require(id); p.setAvailable(!p.isAvailable()); persist(); }
     public void deleteProduct(int id) { products.remove(require(id)); persist(); }
+    /** Finds the product of an order line. Old orders have no product id, so the name is used. */
+    private FoodProduct productOfLine(OrderLine l) {
+        FoodProduct p = findProduct(l.getProductId());
+        if (p != null) return p;
+        for (FoodProduct x : products) if (x.getName().equalsIgnoreCase(l.getName())) return x;
+        return null;
+    }
     private FoodProduct require(int id) { FoodProduct p = findProduct(id); if (p == null) throw new IllegalArgumentException("Product not found."); return p; }
 
     // ---- orders
@@ -104,7 +111,7 @@ public final class Store {
         if (actor == null || !actor.isStaff()) throw new IllegalArgumentException("Staff login required.");
         Order o = findOrder(orderId); if (o == null) throw new IllegalArgumentException("Order not found.");
         if (o.getStatus() == Order.Status.CANCELLED) throw new IllegalArgumentException("Cancelled orders cannot be changed.");
-        if (status == Order.Status.CANCELLED) for (OrderLine l : o.getLines()) { FoodProduct p = findProduct(l.getProductId()); if (p != null) p.addStock(l.getQuantity()); }   // return the stock
+        if (status == Order.Status.CANCELLED) for (OrderLine l : o.getLines()) { FoodProduct p = productOfLine(l); if (p != null) p.addStock(l.getQuantity()); }   // return the stock
         o.setStatus(status); o.assignCashier(actor.getName()); persist();
     }
     /** The staff member who prints or hands over the receipt becomes the cashier if nobody is recorded yet. */
