@@ -1,0 +1,10 @@
+# Netlify only forwards every request to the Java server on Render.
+# No build step and no JavaScript: the pages are written by the Java code.
+[build]
+  publish = "netlify-site"
+
+[[redirects]]
+  from = "/*"
+  to = "https://sulitbites.onrender.com/:splat"
+  status = 200
+  force = true

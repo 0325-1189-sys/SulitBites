@@ -23,6 +23,12 @@ Windows PowerShell: `javac -encoding UTF-8 -d out (Get-ChildItem -Recurse src -F
 Netlify cannot run Java, so the Java server runs on Render and Netlify forwards every request to it.
 The address stays `https://sulitbites.netlify.app`. The folder `netlify-site` holds the only file Netlify needs (`_redirects`, no JavaScript).
 
+How everything is connected:
+```
+GitHub repo (0325-1189-sys/SulitBites)  ->  Render builds and runs the Java server  ->  Firebase Realtime Database
+Netlify (sulitbites.netlify.app)  ->  forwards every request to the Java server on Render
+```
+
 1. **GitHub**: put this whole folder in your repository and push.
 2. **Render** (render.com, free): New > Blueprint (or Web Service), pick the repository. It builds with the `Dockerfile` and `render.yaml`.
    The environment variable `FIREBASE_URL` connects the database. After the deploy, the Render log must say `Loaded data from Firebase`.

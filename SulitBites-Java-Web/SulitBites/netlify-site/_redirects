@@ -1,0 +1,3 @@
+# Netlify forwards every request to the Java server on Render. The address in the browser stays sulitbites.netlify.app.
+# If Render gave your service a different address, change it here and deploy this folder again.
+/*  https://sulitbites.onrender.com/:splat  200!
