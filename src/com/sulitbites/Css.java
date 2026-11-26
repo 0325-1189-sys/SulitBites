@@ -134,5 +134,7 @@ a.pill{display:inline-block}.qtyin{width:76px;margin:0;padding:6px 8px;text-alig
  .bd{border-color:#000;background:#fff!important;color:#000!important}.stamp{color:#000;border-color:#000}.mut,.rh p{color:#000}
  @page{margin:6mm}
 }
+.authlogo{text-align:center;margin-bottom:18px}.bigbun{display:inline-grid;place-items:center;width:92px;height:92px;font-size:54px;background:var(--yel);border:3px solid var(--ink);border-radius:50%;box-shadow:var(--sh)}
+.authlogo h1{font-size:30px;font-weight:800;margin-top:12px}a.flash{display:block;text-decoration:none;color:inherit}
 """;
 }

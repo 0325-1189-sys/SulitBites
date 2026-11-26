@@ -54,8 +54,20 @@ public final class Store {
         if (username == null || !username.matches("[A-Za-z0-9_]{3,20}")) throw new IllegalArgumentException("Username must be 3 to 20 letters, numbers or underscores.");
         if (password == null || password.length() < 4) throw new IllegalArgumentException("Password needs 4 or more characters.");
         if (findUser(username) != null) throw new IllegalArgumentException("That username is taken. Pick another one.");
-        User u = new Customer(username, password, name); users.add(u); persist(); return u;
+        User u = new Customer(username, password, name); u.setApproved(false); users.add(u); persist(); return u;     // waits for the admin
     }
+    public List<User> pendingUsers() { List<User> l = new ArrayList<>(); for (User u : users) if (!u.isApproved()) l.add(u); return l; }
+    public void approveUser(User actor, String username) {
+        requireApprover(actor); User u = findUser(username);
+        if (u == null || u.isApproved()) throw new IllegalArgumentException("That request was not found.");
+        u.setApproved(true); persist();
+    }
+    public void rejectUser(User actor, String username) {
+        requireApprover(actor); User u = findUser(username);
+        if (u == null || u.isApproved()) throw new IllegalArgumentException("Only pending requests can be rejected.");
+        users.remove(u); persist();
+    }
+    private void requireApprover(User actor) { if (actor == null || !actor.canApproveAccounts()) throw new IllegalArgumentException("Only the admin can approve accounts."); }
 
     // ---- products and stock (the web layer checks that the user is the admin)
     public FoodProduct addProduct(String category, String name, double price, int stock, String emoji, String description) {

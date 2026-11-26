@@ -10,7 +10,7 @@ final class Codec {
 
     static Map<String, Object> toMap(User u) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("role", u.getRole()); m.put("username", u.getUsername()); m.put("password", u.getPasswordHash()); m.put("name", u.getName()); return m;
+        m.put("role", u.getRole()); m.put("username", u.getUsername()); m.put("password", u.getPasswordHash()); m.put("name", u.getName()); m.put("approved", u.isApproved()); return m;
     }
     static Map<String, Object> toMap(FoodProduct p) {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -40,7 +40,11 @@ final class Codec {
     }
     @SuppressWarnings("unchecked") private static Map<String, Object> map(Object o) { return (Map<String, Object>) o; }
 
-    static User user(Map<String, Object> m) { return User.create(str(m.get("role"), "Customer"), str(m.get("username"), ""), str(m.get("password"), ""), str(m.get("name"), "")); }
+    static User user(Map<String, Object> m) {
+        User u = User.create(str(m.get("role"), "Customer"), str(m.get("username"), ""), str(m.get("password"), ""), str(m.get("name"), ""));
+        u.setApproved(!Boolean.FALSE.equals(m.get("approved")));                  // accounts saved before approval existed stay approved
+        return u;
+    }
     static FoodProduct product(Map<String, Object> m) {
         FoodProduct p = FoodProduct.create(str(m.get("category"), "Meal"), (int) num(m.get("id")), str(m.get("name"), ""), num(m.get("price")), (int) num(m.get("stock")), str(m.get("emoji"), ""), str(m.get("desc"), ""));
         p.setAvailable(!Boolean.FALSE.equals(m.get("available"))); return p;

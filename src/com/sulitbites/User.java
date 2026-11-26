@@ -8,6 +8,7 @@ public abstract class User {
     private final String username;
     private final String passwordHash;
     private String name;
+    private boolean approved = true;                     // new customers start as false until the admin approves them
 
     protected User(String username, String password, String name) {
         if (username == null || username.isBlank()) throw new IllegalArgumentException("Username is required.");
@@ -35,6 +36,9 @@ public abstract class User {
     public abstract String getRole();                    // POLYMORPHISM: each subclass names its own role
     public boolean isStaff() { return false; }
     public boolean canManageProducts() { return false; }
+    public boolean canApproveAccounts() { return false; }                       // only the admin approves new accounts
+    public final boolean isApproved() { return approved; }
+    public final void setApproved(boolean approved) { this.approved = approved; }
 
     /** Factory method used when loading users from storage. */
     public static User create(String role, String username, String password, String name) {

@@ -106,6 +106,7 @@ public final class SulitBitesWebApp {
     }
     private Response needLogin(Request r) { return r.user == null ? redirect("/login", "Please log in first.", true) : null; }
     private Response needStaff(Request r) { Response x = needLogin(r); return x != null ? x : r.user.isStaff() ? null : forbidden(r); }
+    private Response needApprover(Request r) { Response x = needStaff(r); return x != null ? x : r.user.canApproveAccounts() ? null : forbidden(r); }
     private Response needAdmin(Request r) { Response x = needStaff(r); return x != null ? x : r.user.canManageProducts() ? null : forbidden(r); }
     private Response startSession(Request r, User u, String to) {
         byte[] b = new byte[24]; random.nextBytes(b); StringBuilder t = new StringBuilder(); for (byte x : b) t.append(String.format("%02x", x));
@@ -141,6 +142,7 @@ public final class SulitBitesWebApp {
             case "/staff/orders": if ((block = needStaff(r)) != null) return block; return page(r, pages.staffOrders(c));
             case "/staff/payments": if ((block = needStaff(r)) != null) return block; return page(r, pages.payments(c, r.q("q"), r.q("m")));
             case "/staff/customers": if ((block = needAdmin(r)) != null) return block; return page(r, pages.customers(c));
+            case "/staff/requests": if ((block = needApprover(r)) != null) return block; return page(r, pages.requests(c));
             case "/staff/products": if ((block = needAdmin(r)) != null) return block; return page(r, pages.staffProducts(c));
             case "/staff/product": {
                 if ((block = needAdmin(r)) != null) return block;
@@ -172,6 +174,13 @@ public final class SulitBitesWebApp {
             case "/staff/status": if ((block = needStaff(r)) != null) return block; return changeStatus(r);
             case "/staff/product/save": if ((block = needAdmin(r)) != null) return block; return saveProduct(r);
             case "/staff/stock/save": if ((block = needAdmin(r)) != null) return block; return saveStock(r);
+            case "/staff/requests/approve": case "/staff/requests/reject": {
+                if ((block = needApprover(r)) != null) return block; boolean ok = p.endsWith("approve"); String who = r.f("username");
+                try {
+                    if (ok) store.approveUser(r.user, who); else store.rejectUser(r.user, who);
+                    return redirect("/staff/requests", ok ? who + " is approved. They can log in now." : "Request from " + who + " was rejected.", false);
+                } catch (IllegalArgumentException e) { return redirect("/staff/requests", e.getMessage(), true); }
+            }
             case "/staff/toggle": {
                 if ((block = needAdmin(r)) != null) return block;
                 try { store.toggleAvailable(num(r.f("id"), -1)); FoodProduct f = store.findProduct(num(r.f("id"), -1)); return redirect("/staff/products", f.getName() + (f.isAvailable() ? " is available again." : " is marked out of stock."), false); }
@@ -193,10 +202,11 @@ public final class SulitBitesWebApp {
         User u = store.authenticate(r.f("username").trim(), r.f("password"));
         if (u == null) { long[] x = failures.computeIfAbsent(name, k -> new long[]{0, now}); x[0]++; return redirect("/login", "Wrong username or password. Check both and try again.", true); }
         failures.remove(name);
+        if (!u.isApproved()) return redirect("/login", "Your account is waiting for the admin's approval. Please try again later.", true);
         return startSession(r, u, u.isStaff() ? "/staff" : "/menu");
     }
     private Response doRegister(Request r) {
-        try { User u = store.register(r.f("name"), r.f("username").trim(), r.f("password")); return startSession(r, u, "/menu"); }
+        try { store.register(r.f("name"), r.f("username").trim(), r.f("password")); return redirect("/login", "Request sent! You can log in after the admin approves your account.", false); }
         catch (IllegalArgumentException e) { return redirect("/register", e.getMessage(), true); }
     }
     private Response cartAdd(Request r) {

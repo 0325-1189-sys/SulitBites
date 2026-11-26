@@ -47,6 +47,7 @@ Netlify (sulitbites.netlify.app)  ->  forwards every request to the Java server 
 - Cashier: dashboard, orders (change status), payments, walk-in orders, receipts that can be printed
 - Admin: everything the cashier can do, plus products (add, edit, delete), **stock** (add, set, mark out of stock) and customers. Only the admin can change stock
 - Receipt: store name, branch, date and time, cashier, customer, items, discount, total, payment. Only Admin and Cashier can print it (Ctrl+P)
+- New accounts are **pending** until the admin approves them (Account requests page). Pending accounts cannot log in
 - A cancelled order counts as 0.00, returns its stock and cannot be changed again
 
 ## Four Pillars of OOP

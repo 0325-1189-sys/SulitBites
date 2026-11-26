@@ -120,19 +120,21 @@ final class Pages {
     private String row(String l, String r) { return "<div class='r'><span>" + l + "</span><span>" + r + "</span></div>"; }
 
     String login(Ctx c) {
-        return layout(c, "Login", "<section class='auth'><div class='card ac'><div class='tabs'><a class='pill on' href='/login'>Login</a><a class='pill' href='/register'>Register</a></div><h2>Welcome back</h2><br>"
+        return layout(c, "Login", "<section class='auth'><div class='card ac'>" + authLogo() + "<div class='tabs'><a class='pill on' href='/login'>Login</a><a class='pill' href='/register'>Register</a></div><h2>Welcome back</h2><br>"
             + "<form method='post' action='/login'><input name='username' class='in' placeholder='Username' aria-label='Username' required autocomplete='username'><input name='password' type='password' class='in' placeholder='Password' aria-label='Password' required autocomplete='current-password'><br><button class='btn lg full'>Login</button></form></div></section>");
     }
     String register(Ctx c) {
-        return layout(c, "Register", "<section class='auth'><div class='card ac'><div class='tabs'><a class='pill' href='/login'>Login</a><a class='pill on' href='/register'>Register</a></div><h2>Create your account</h2><br>"
-            + "<form method='post' action='/register'><input name='name' class='in' placeholder='Full name' aria-label='Full name' required><input name='username' class='in' placeholder='Username' aria-label='Username' required autocomplete='username'><input name='password' type='password' class='in' placeholder='Password (4+ characters)' aria-label='Password' required autocomplete='new-password'><br><button class='btn lg full'>Create account</button></form><p class='hint'>Username: 3 to 20 letters, numbers or underscores.</p></div></section>");
+        return layout(c, "Register", "<section class='auth'><div class='card ac'>" + authLogo() + "<div class='tabs'><a class='pill' href='/login'>Login</a><a class='pill on' href='/register'>Register</a></div><h2>Create your account</h2><br>"
+            + "<form method='post' action='/register'><input name='name' class='in' placeholder='Full name' aria-label='Full name' required><input name='username' class='in' placeholder='Username' aria-label='Username' required autocomplete='username'><input name='password' type='password' class='in' placeholder='Password (4+ characters)' aria-label='Password' required autocomplete='new-password'><br><button class='btn lg full'>Request account</button></form><p class='hint'>Username: 3 to 20 letters, numbers or underscores.</p><p class='hint'><b>New accounts need the admin's approval</b> before you can log in.</p></div></section>");
     }
 
     // ---------------------------------------------------------------- staff pages
     private String shell(Ctx c, String active, String inner) {
-        String[][] links = {{"dashboard", "/staff", "Dashboard", "0"}, {"products", "/staff/products", "Products", "1"}, {"orders", "/staff/orders", "Orders", "0"}, {"customers", "/staff/customers", "Customers", "1"}, {"payments", "/staff/payments", "Payments", "0"}};
+        String[][] links = {{"dashboard", "/staff", "Dashboard", "0"}, {"products", "/staff/products", "Products", "1"}, {"orders", "/staff/orders", "Orders", "0"}, {"customers", "/staff/customers", "Customers", "1"}, {"requests", "/staff/requests", "Account requests", "2"}, {"payments", "/staff/payments", "Payments", "0"}};
         StringBuilder b = new StringBuilder("<section class='adm sec'><aside class='side card'>");
-        for (String[] l : links) if (l[3].equals("0") || c.user.canManageProducts()) b.append("<a class='").append(l[0].equals(active) ? "on" : "").append("' href='").append(l[1]).append("'>").append(l[2]).append("</a>");
+        int pending = store.pendingUsers().size();
+        for (String[] l : links) if (l[3].equals("0") || (l[3].equals("1") && c.user.canManageProducts()) || (l[3].equals("2") && c.user.canApproveAccounts()))
+            b.append("<a class='").append(l[0].equals(active) ? "on" : "").append("' href='").append(l[1]).append("'>").append(l[2]).append(l[0].equals("requests") && pending > 0 ? " <span class='cnt'>" + pending + "</span>" : "").append("</a>");
         return b.append("</aside><div>").append(inner).append("</div></section>").toString();
     }
     private String bars(Map<String, Double> data, boolean money) {
@@ -150,7 +152,9 @@ final class Pages {
         }
         long low = store.getProducts().stream().filter(p -> !p.getStatus().equals("In stock")).count();
         Map<String, Double> top = new LinkedHashMap<>(); sold.entrySet().stream().sorted((x, y) -> Double.compare(y.getValue(), x.getValue())).limit(5).forEach(e -> top.put(e.getKey(), e.getValue()));
-        StringBuilder b = new StringBuilder("<h2>Dashboard</h2><div class='stats4'>");
+        StringBuilder b = new StringBuilder("<h2>Dashboard</h2>"); int waiting = store.pendingUsers().size();
+        if (c.user.canApproveAccounts() && waiting > 0) b.append("<a class='flash' href='/staff/requests'>").append(waiting).append(waiting == 1 ? " account request is" : " account requests are").append(" waiting for your approval. Review them</a>");
+        b.append("<div class='stats4'>");
         String[][] st = {{"Total sales", money(sales)}, {"Orders", "" + store.getOrders().size()}, {"Pending", "" + pending}, {"Products", "" + store.getProducts().size()}, {"Low or out of stock", "" + low}};
         for (String[] s : st) b.append("<div class='card st'><span>").append(s[0]).append("</span><b>").append(s[1]).append("</b></div>");
         b.append("</div><div class='two'><div class='card pad'><h3>Best sellers</h3>").append(bars(top, false)).append("</div><div class='card pad'><h3>Sales by payment</h3>").append(bars(pay, true)).append("</div></div><h3 class='mt'>Recent orders</h3><br>");
@@ -179,7 +183,7 @@ final class Pages {
     String customers(Ctx c) {
         StringBuilder b = new StringBuilder("<h2>Customers</h2><br><div class='card tw'><table class='tbl'><tr><th>Name</th><th>Username</th><th>Orders</th><th>Total spent</th></tr>"); int n = 0;
         for (User u : store.getUsers()) {
-            if (u.isStaff()) continue; n++; int cnt = 0; double spent = 0;
+            if (u.isStaff() || !u.isApproved()) continue; n++; int cnt = 0; double spent = 0;
             for (Order o : store.getOrders()) if (o.getUsername().equals(u.getUsername()) && o.getStatus() != Order.Status.CANCELLED) { cnt++; spent += o.getTotal(); }
             b.append("<tr>").append(td("Name", h(u.getName()))).append(td("Username", h(u.getUsername()))).append(td("Orders", "" + cnt)).append(td("Total spent", money(spent))).append("</tr>");
         }
@@ -197,6 +201,19 @@ final class Pages {
         }
         if (n == 0) b.append("<tr><td colspan='6' class='mut'>No payments match.</td></tr>");
         return layout(c, "Payments", shell(c, "payments", b.append("</table></div>").toString()));
+    }
+    private String authLogo() { return "<div class='authlogo'><span class='bigbun'>\uD83C\uDF54</span><h1>Sulit Bites</h1></div>"; }
+    String requests(Ctx c) {
+        StringBuilder b = new StringBuilder("<h2>Account requests</h2><p class='mut'>People who registered must be approved here before they can log in.</p><br><div class='card tw'><table class='tbl'><tr><th>Name</th><th>Username</th><th></th></tr>");
+        List<User> pending = store.pendingUsers();
+        if (pending.isEmpty()) b.append("<tr><td colspan='3' class='mut'>No pending requests.</td></tr>");
+        for (User u : pending) {
+            String hidden = "<input type='hidden' name='username' value='" + h(u.getUsername()) + "'>";
+            b.append("<tr>").append(td("Name", h(u.getName()))).append(td("Username", h(u.getUsername())))
+                .append("<td class='act' data-label=''><form method='post' action='/staff/requests/approve' class='inl'>").append(hidden).append("<button class='btn sm'>Approve</button></form> ")
+                .append("<form method='post' action='/staff/requests/reject' class='inl'>").append(hidden).append("<button class='btn alt sm'>Reject</button></form></td></tr>");
+        }
+        return layout(c, "Account requests", shell(c, "requests", b.append("</table></div>").toString()));
     }
     String staffProducts(Ctx c) {
         StringBuilder b = new StringBuilder("<div class='sh'><h2>Products</h2><a class='btn sm' href='/staff/product'>Add product</a></div><div class='card tw'><table class='tbl'><tr><th></th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th></th></tr>");
